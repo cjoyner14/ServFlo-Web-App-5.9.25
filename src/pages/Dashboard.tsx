@@ -43,6 +43,8 @@ export const Dashboard = () => {
   const [isDashboardLoaded, setIsDashboardLoaded] = useState(() => {
     return sessionStorage.getItem(DASHBOARD_LOADED_KEY) === 'true';
   });
+  // Add a loading state to track data loading progress
+  const [isDataLoading, setIsDataLoading] = useState(false);
   // Removed selectedStage state since it's now managed by the ServiceFlow component
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
 
@@ -52,20 +54,23 @@ export const Dashboard = () => {
   const { fetchInvoices } = useInvoiceStore();
   const { toast } = useNotifications();
 
+  // Always fetch data on mount to ensure we have fresh data
   useEffect(() => {
     const loadData = async () => {
+      setIsDataLoading(true);
       try {
-        await Promise.all([
+        // Always fetch data - even if dashboard has been "loaded" before
+        const results = await Promise.all([
           fetchJobs(),
           fetchCustomers(),
           fetchEstimates(),
           fetchInvoices()
         ]);
-        
+
         // Simple logging, avoid complex operations that could break
         console.log('Total customers:', customers.length);
-        
-        // Mark dashboard as loaded for this session
+
+        // Mark dashboard as loaded ONLY AFTER data has been successfully loaded
         sessionStorage.setItem(DASHBOARD_LOADED_KEY, 'true');
         setIsDashboardLoaded(true);
       } catch (error) {
@@ -78,18 +83,16 @@ export const Dashboard = () => {
         } else {
           console.error('Error loading dashboard data:', error);
         }
-        // Still mark as loaded so we don't keep trying if there's an error
-        sessionStorage.setItem(DASHBOARD_LOADED_KEY, 'true');
-        setIsDashboardLoaded(true);
+      } finally {
+        // Always mark loading as complete
+        setIsDataLoading(false);
       }
     };
-    
-    // If not already loaded in this session, load data
-    if (!isDashboardLoaded) {
+
+    // Always load data on mount, but avoid duplicate fetches if loading is in progress
+    if (!isDataLoading) {
       console.log('Dashboard: Loading data');
       loadData();
-    } else {
-      console.log('Dashboard: Already loaded this session');
     }
 
     // Set up online/offline event listeners
@@ -99,7 +102,10 @@ export const Dashboard = () => {
         description: "Syncing data with server...",
         duration: 3000
       });
-      loadData();
+      // Reload data when coming back online
+      if (!isDataLoading) {
+        loadData();
+      }
     };
 
     const handleOffline = () => {
@@ -117,7 +123,7 @@ export const Dashboard = () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [fetchJobs, fetchCustomers, fetchEstimates, fetchInvoices, toast, isDashboardLoaded]);
+  }, [fetchJobs, fetchCustomers, fetchEstimates, fetchInvoices, toast]);
 
   // Get today's jobs
   const today = new Date();

@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
-import { BarChart4, ChevronDown, ChevronUp, ExternalLink, Shuffle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BarChart4, ChevronDown, ChevronUp, ExternalLink, Shuffle, Loader2 } from 'lucide-react';
 import { serviceFlowStages } from './stages/serviceFlowStages';
 import { useServiceFlow } from './stages/useServiceFlow';
 import { ServiceFlowModal } from './new-service-flow/ServiceFlowModal';
 import type { Customer } from '../../lib/supabase-types';
 import { useNavigate } from 'react-router-dom';
+import { useCustomerStore } from '../../store/customerStore';
+import { useEstimateStore } from '../../store/estimateStore';
+import { useJobStore } from '../../store/jobStore';
+import { useInvoiceStore } from '../../store/invoiceStore';
 
 export const ServiceFlowMetrics: React.FC = () => {
   const [selectedStage, setSelectedStage] = useState<{
@@ -13,12 +17,29 @@ export const ServiceFlowMetrics: React.FC = () => {
     color: string;
   } | null>(null);
   const [expanded, setExpanded] = useState(true);
-  
+  const [isLoading, setIsLoading] = useState(true);
+
   const navigate = useNavigate();
+
+  // Get loading states from all required stores
+  const { customers, loading: customersLoading } = useCustomerStore();
+  const { estimates, loading: estimatesLoading } = useEstimateStore();
+  const { jobs, loading: jobsLoading } = useJobStore();
+  const { invoices, loading: invoicesLoading } = useInvoiceStore();
+
+  // Track loading state for all required data
+  useEffect(() => {
+    // If any data is loading or if customers array is empty, consider the component as loading
+    const isAnyDataLoading = customersLoading || estimatesLoading || jobsLoading || invoicesLoading;
+    const isDataMissing = !Array.isArray(customers) || customers.length === 0;
+
+    // Only stop loading when all data is loaded and customers array is populated
+    setIsLoading(isAnyDataLoading || isDataMissing);
+  }, [customers, customersLoading, estimates, estimatesLoading, jobs, jobsLoading, invoices, invoicesLoading]);
 
   // Use the service flow hook to get customer counts for each stage
   const serviceFlow = useServiceFlow();
-  
+
   // Get customers for each stage and calculate percentages
   const stagesWithData = serviceFlowStages.map(stage => {
     const customers = serviceFlow.getCustomersForStage(stage.id);
@@ -90,9 +111,15 @@ export const ServiceFlowMetrics: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            {totalActiveCustomers > 0 && (
+            {!isLoading && totalActiveCustomers > 0 && (
               <div className="bg-[#0A7E3D]/10 px-2 py-0.5 rounded text-xs font-medium text-[#0A7E3D]">
                 {totalActiveCustomers} active
+              </div>
+            )}
+            {isLoading && (
+              <div className="flex items-center space-x-2 text-gray-500">
+                <Loader2 className="w-4 h-4 animate-spin text-[#0A7E3D]" />
+                <span className="text-xs">Loading...</span>
               </div>
             )}
             <div>
@@ -108,7 +135,12 @@ export const ServiceFlowMetrics: React.FC = () => {
       
       {expanded && (
         <div className="p-4">
-          {totalActiveCustomers === 0 ? (
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-10">
+              <Loader2 className="w-10 h-10 animate-spin text-[#0A7E3D] mb-4" />
+              <p className="text-sm text-gray-500">Loading customer data...</p>
+            </div>
+          ) : totalActiveCustomers === 0 ? (
             <div className="py-6 text-center">
               <div className="mx-auto bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mb-3">
                 <Shuffle className="w-8 h-8 text-gray-400" />
